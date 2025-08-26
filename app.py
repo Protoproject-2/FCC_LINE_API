@@ -104,6 +104,33 @@ def send_emergency():
 
     return jsonify({"status": "ok", "message": "緊急メッセージ登録完了", "line_result": res})
 
+# id発行
+@app.route("/get_id", methods=["POST"])
+def upsert_app_user():
+    """
+    name と line_user_id が送られてきたら app_users に追加（重複は無視）
+    line_user_id が送られてきたら対応する id を返す
+    """
+    data = request.get_json()
+    name = data.get("name")
+    line_user_id = data.get("line_user_id")
+
+    if not line_user_id:
+        return "line_user_id が必要です", 400
+
+    # まず line_user_id が既にあるか確認
+    result = supabase_db.supabase.table("app_users").select("id").eq("line_user_id", line_user_id).execute()
+    existing = result.data[0]["id"] if result.data else None
+
+    # まだ存在しなければ追加
+    if not existing and name:
+        insert_data = {"name": name, "line_user_id": line_user_id}
+        res = supabase_db.supabase.table("app_users").insert(insert_data).execute()
+        existing = res.data[0]["id"]
+
+    return jsonify({"id": existing})
+
+
 # --- Webhook受信 ---
 @app.route("/webhook", methods=["POST"])
 def webhook():
