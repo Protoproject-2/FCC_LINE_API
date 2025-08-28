@@ -82,7 +82,7 @@ def callback():
     return "友達登録が完了しました！"
 
 
-# --- 緊急メッセージ送信例 ---
+# --- 連絡を受信できる人のidリストを取得 ---
 @app.route("/get_contactable_user", methods=["POST"])
 def get_contactable_user():
     data = request.get_json()
@@ -133,6 +133,8 @@ def send_emergency():
     user_id = data.get("user_id")
     contact_ids = data.get("contact_ids")
     message = data.get("message")
+    latitude = data.get("latitude")   # 追加
+    longitude = data.get("longitude") # 追加
 
     # バリデーション
     if not user_id or not contact_ids or not message:
@@ -154,13 +156,22 @@ def send_emergency():
     # --- メッセージにユーザー名を追加 ---
     final_message = f"{user_name}さんが緊急事態です。\n{message}"
 
+    # --- 位置情報があれば追加 ---
+    location_message = ""
+    if latitude and longitude:
+        location_message = f"\n位置情報: https://maps.google.com/?q={latitude},{longitude}"
+        final_message += location_message
+
     # 送信結果をまとめるリスト
     line_results = []
 
     # 受信側 DB と LINE 送信をループで処理
     for contact_id in contact_ids:
         # Supabase に保存
-        supabase_db.send_emergency_message(user_id, contact_id, final_message)
+        supabase_db.send_emergency_message(
+            user_id, contact_id, final_message, 
+            latitude, longitude,
+        )
 
         # contact_id から LINE userId を取得
         contact_res = (
