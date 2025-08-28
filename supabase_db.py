@@ -53,18 +53,26 @@ def add_friend(user_id: int, contact_id: int, relationship: str = "friend"):
 # -------------------------------
 # 緊急メッセージ
 # -------------------------------
-def send_emergency_message(user_id: int, contact_id: int, message: str, status: str = "pending"):
+def send_emergency_message(user_id: int, contact_id: int, message: str, latitude: float | None = None, longitude: float | None = None, status: str = "pending"):
     """
     emergency_messages に新規メッセージを登録
     status: pending / sent / failed
+    latitude / longitude: 位置情報（任意）
     """
-    return supabase.table("emergency_messages").insert({
+    data = {
         "user_id": user_id,
         "contact_id": contact_id,
         "message": message,
         "status": status,
         "created_at": datetime.utcnow().isoformat()
-    }).execute()
+    }
+
+    # 緯度・経度がある場合のみ追加
+    if latitude is not None and longitude is not None:
+        data["latitude"] = latitude
+        data["longitude"] = longitude
+
+    return supabase.table("emergency_messages").insert(data).execute()
 
 # -------------------------------
 # 同一データは保存しない
