@@ -12,4 +12,3 @@ CALLBACK_URL = "https://fccapi.ddns.net/callback"
 
 # LINE_messaging_APIチャネル
 LINE_CHANNEL_ACCESS_TOKEN = "g8JQ5XLzXND4KJNBVkBuq2xLDibIefJ8AiZ4ZJ0oCJNh5TAkV0/bEH3NFqAzfj8FFFmw+OiFgpx3VJbyQM2Mxm0j7X35PnaxAwAhw7dOakza83pRR7XNx0rJELMARDdO9AsVadPF/oljqQDRRc+BvQdB04t89/1O/w1cDnyilFU="
-
