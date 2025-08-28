@@ -65,3 +65,19 @@ def send_emergency_message(user_id: int, contact_id: int, message: str, status: 
         "status": status,
         "created_at": datetime.utcnow().isoformat()
     }).execute()
+
+# -------------------------------
+# 同一データは保存しない
+# -------------------------------
+def check_friend_exists(invite_user_id: int, contact_id: int) -> bool:
+    """
+    user_id と contact_id の組がすでに存在するか確認する
+    """
+    result = supabase.table("user_friends") \
+        .select("*") \
+        .eq("user_id", invite_user_id) \
+        .eq("contact_id", contact_id) \
+        .execute()
+    
+    # データが1件以上あれば存在する
+    return bool(result.data and len(result.data) > 0)

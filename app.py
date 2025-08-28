@@ -45,7 +45,6 @@ def callback():
     print("catch callback")
     code = request.args.get("code")
     invite_user_id = session.get("invite_user_id")
-    # print("invite_user_id =", invite_user_id)
 
     if not code or not invite_user_id:
         return "エラー: codeまたはinvite_user_idが無効", 400
@@ -67,42 +66,105 @@ def callback():
     profile_url = "https://api.line.me/v2/profile"
     headers = {"Authorization": f"Bearer {access_token}"}
     profile_res = requests.get(profile_url, headers=headers).json()
-    print("profile_res =", profile_res)
     line_user_id = profile_res["userId"]
 
     # Supabase に保存
     contact_id = supabase_db.get_or_create_contact(line_user_id)
+
+    # 追加前に存在チェック
+    exists = supabase_db.check_friend_exists(invite_user_id, contact_id)
+    if exists:
+        return "既に追加済みです", 200
+
     supabase_db.add_friend(invite_user_id, contact_id, relationship="friend")
     print("save successful")
 
     return "友達登録が完了しました！"
+
+
+# --- 緊急メッセージ送信例 ---
+@app.route("/get_contactable_user", methods=["POST"])
+def get_contactable_user():
+    data = request.get_json()
+    user_id = data.get("user_id")
+
+    if not user_id:
+        return jsonify({"error": "user_id is required"}), 400
+
+    try:
+        # user_friends → line_contacts に join
+        friends_res = (
+            supabase_db.supabase.table("user_friends")
+            .select("contact_id, line_contacts(display_name)")
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        if not friends_res.data:
+            return jsonify({"user_id": user_id, "contacts": []})
+
+        # unknown補間
+        contacts = []
+        for row in friends_res.data:
+            contact_id = row["contact_id"]
+
+            display_name = "Unknown"
+            if "line_contacts" in row and row["line_contacts"]:
+                if row["line_contacts"]["display_name"]:
+                    display_name = row["line_contacts"]["display_name"]
+
+            contacts.append({
+                "contact_id": contact_id,
+                "display_name": display_name
+            })
+
+        return jsonify({
+            "user_id": user_id,
+            "contacts": contacts
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # --- 緊急メッセージ送信例 ---
 @app.route("/send_emergency", methods=["POST"])
 def send_emergency():
     data = request.get_json()
     user_id = data.get("user_id")
-    contact_id = data.get("contact_id")
+    contact_ids = data.get("contact_ids")
     message = data.get("message")
 
-    if not all([user_id, contact_id, message]):
-        return "user_id, contact_id, message が必要", 400
+    # バリデーション
+    if not user_id or not contact_ids or not message:
+        return "user_id, contact_ids, message が必要", 400
 
-    # まず Supabase に保存
-    supabase_db.send_emergency_message(user_id, contact_id, message)
+    # 送信結果をまとめるリスト
+    line_results = []
 
-    # contact_id から LINE userId を取得
-    contact_res = supabase_db.supabase.table("line_contacts").select("line_user_id").eq("id", contact_id).execute()
-    if not contact_res.data:
-        return "contact_id が見つかりません", 404
+    # 受信側 DB と LINE 送信をループで処理
+    for contact_id in contact_ids:
+        # Supabase に保存
+        supabase_db.send_emergency_message(user_id, contact_id, message)
 
-    line_user_id = contact_res.data[0]["line_user_id"]
+        # contact_id から LINE userId を取得
+        contact_res = (
+            supabase_db.supabase.table("line_contacts")
+            .select("line_user_id")
+            .eq("id", contact_id)
+            .execute()
+        )
 
-    # LINE送信
-    res = send_msg.SendMsg(message, line_user_id)
-    print("LINE送信結果:", res)
+        if not contact_res.data:
+            line_results.append({"contact_id": contact_id, "status": "contact not found"})
+            continue
 
-    return jsonify({"status": "ok", "message": "緊急メッセージ登録完了", "line_result": res})
+        line_user_id = contact_res.data[0]["line_user_id"]
+
+        # LINE送信
+        res = send_msg.SendMsg(message, line_user_id)
+        line_results.append({"contact_id": contact_id, "line_result": res})
+
+    return jsonify({"status": "ok", "message": "緊急メッセージ登録完了", "results": line_results})
 
 # id発行
 @app.route("/get_id", methods=["POST"])
