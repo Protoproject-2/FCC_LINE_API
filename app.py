@@ -138,13 +138,29 @@ def send_emergency():
     if not user_id or not contact_ids or not message:
         return "user_id, contact_ids, message が必要", 400
 
+    # --- 追加: user_id からユーザー名を取得 ---
+    user_res = (
+        supabase_db.supabase.table("app_users")
+        .select("name")
+        .eq("id", user_id)
+        .execute()
+    )
+    
+    if not user_res.data:
+        return jsonify({"status": "error", "message": "ユーザーが見つかりません"}), 404
+
+    user_name = user_res.data[0]["name"]
+
+    # --- メッセージにユーザー名を追加 ---
+    final_message = f"{user_name}さんが緊急事態です。\n{message}"
+
     # 送信結果をまとめるリスト
     line_results = []
 
     # 受信側 DB と LINE 送信をループで処理
     for contact_id in contact_ids:
         # Supabase に保存
-        supabase_db.send_emergency_message(user_id, contact_id, message)
+        supabase_db.send_emergency_message(user_id, contact_id, final_message)
 
         # contact_id から LINE userId を取得
         contact_res = (
@@ -161,7 +177,7 @@ def send_emergency():
         line_user_id = contact_res.data[0]["line_user_id"]
 
         # LINE送信
-        res = send_msg.SendMsg(message, line_user_id)
+        res = send_msg.SendMsg(final_message, line_user_id)
         line_results.append({"contact_id": contact_id, "line_result": res})
 
     return jsonify({"status": "ok", "message": "緊急メッセージ登録完了", "results": line_results})
